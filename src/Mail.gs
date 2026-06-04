@@ -167,7 +167,7 @@ var Mail = (function () {
       if (part.parts && part.parts.length) part.parts.forEach(walk);
       var mime = part.mimeType || '';
       if (part.body && part.body.data) {
-        var decoded = decodeB64(part.body.data);
+        var decoded = decodeB64(part.body.data, partCharset(part));
         if (mime === 'text/html' && !html) html = decoded;
         else if (mime === 'text/plain' && !text) text = decoded;
       }
@@ -259,8 +259,47 @@ var Mail = (function () {
     return /^re:/i.test(String(s).trim()) ? s : 'Re: ' + s;
   }
 
-  function decodeB64(data) {
-    return Utilities.newBlob(Utilities.base64DecodeWebSafe(data)).getDataAsString('UTF-8');
+  /** パートの Content-Type からエンコーディングを取得（既定 UTF-8）。 */
+  function partCharset(part) {
+    var hs = (part && part.headers) || [];
+    for (var i = 0; i < hs.length; i++) {
+      if (hs[i].name && hs[i].name.toLowerCase() === 'content-type') {
+        var m = /charset\s*=\s*"?([^";]+)"?/i.exec(hs[i].value || '');
+        if (m) return m[1].trim();
+      }
+    }
+    return 'UTF-8';
+  }
+
+  /**
+   * Gmail API の base64url ボディを安全にデコードする。
+   * base64DecodeWebSafe が失敗する入力（パディング無し・標準base64混在等）にも対応し、
+   * 文字コード未対応時は UTF-8 にフォールバックして、例外を投げないようにする。
+   */
+  function decodeB64(data, charset) {
+    if (!data) return '';
+    charset = charset || 'UTF-8';
+    var bytes = null;
+    try {
+      bytes = Utilities.base64DecodeWebSafe(data);
+    } catch (e) {
+      try {
+        var norm = String(data).replace(/-/g, '+').replace(/_/g, '/').replace(/\s+/g, '');
+        while (norm.length % 4 !== 0) norm += '=';
+        bytes = Utilities.base64Decode(norm);
+      } catch (e2) {
+        return '';
+      }
+    }
+    try {
+      return Utilities.newBlob(bytes).getDataAsString(charset);
+    } catch (e3) {
+      try {
+        return Utilities.newBlob(bytes).getDataAsString('UTF-8');
+      } catch (e4) {
+        return '';
+      }
+    }
   }
 
   function formatDate(s) {
