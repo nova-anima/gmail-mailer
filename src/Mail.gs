@@ -58,7 +58,7 @@ var Mail = (function () {
         cc: m.getCc() || '',
         date: formatDateObj(m.getDate()),
         subject: m.getSubject() || '',
-        html: m.getBody() || '',          // デコード済み HTML 本文
+        html: bodyToDisplayHtml(m),        // 表示用HTML（素テキストは改行を保持）
         text: m.getPlainBody() || ''
       };
     });
@@ -92,6 +92,23 @@ var Mail = (function () {
       to: toList.map(function (a) { return a.full; }).join(', '),
       cc: ccList.map(function (a) { return a.full; }).join(', ')
     };
+  }
+
+  /**
+   * 表示用 HTML を返す。HTML メールはそのまま、プレーンテキストのメールは
+   * 改行・空白を保持するため <pre> で包んでエスケープする
+   * （GmailApp.getBody() は素テキストの改行を <br> 化しないため、そのままだと1行になる）。
+   */
+  function bodyToDisplayHtml(m) {
+    var html = m.getBody() || '';
+    if (looksLikeHtml(html)) return html;
+    var text = m.getPlainBody() || html;
+    return '<pre style="white-space:pre-wrap;word-wrap:break-word;overflow-wrap:anywhere;'
+      + 'font-family:inherit;margin:0;">' + escapeHtml(text) + '</pre>';
+  }
+
+  function looksLikeHtml(s) {
+    return /<(br|p|div|table|tbody|tr|td|span|a|ul|ol|li|h[1-6]|blockquote|img|pre|html|body|font|b|i|strong|em)\b|<\/(p|div|table|body|html|span|a)>/i.test(String(s));
   }
 
   // ---- 送信 -------------------------------------------------------------
@@ -254,6 +271,10 @@ var Mail = (function () {
   function formatDateObj(d) {
     if (!d || isNaN(d.getTime && d.getTime())) return '';
     return Utilities.formatDate(d, 'Asia/Tokyo', 'yyyy/MM/dd HH:mm');
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
   return {
