@@ -1,0 +1,18 @@
+{
+  "name": "gmailer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "団体Gmailアドレスを複数人で閲覧・返信するための簡易メーラー（Google Apps Script Webアプリ）",
+  "scripts": {
+    "login": "clasp login",
+    "push": "clasp push",
+    "pushw": "clasp push --watch",
+    "open": "clasp open",
+    "deploy": "clasp deploy",
+    "deployments": "clasp deployments",
+    "logs": "clasp logs"
+  },
+  "devDependencies": {
+    "@google/clasp": "^2.4.2"
+  }
+}

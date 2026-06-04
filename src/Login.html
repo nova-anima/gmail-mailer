@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <base target="_top">
+  <?!= include('Styles'); ?>
+</head>
+<body class="login-body">
+  <main class="login-card">
+    <h1 class="login-title"><?= appTitle ?></h1>
+    <p class="login-sub">団体アカウントの共有メーラー</p>
+
+    <? if (message) { ?>
+      <div class="login-message"><?= message ?></div>
+    <? } ?>
+
+    <a class="gbtn" href="<?= authUrl ?>" target="_top">
+      <span class="gbtn-icon">G</span>
+      <span>Google でログイン</span>
+    </a>
+
+    <p class="login-note">許可されたユーザーのみ利用できます。</p>
+  </main>
+</body>
+</html>

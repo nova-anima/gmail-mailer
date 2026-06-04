@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <base target="_top">
+  <?!= include('Styles'); ?>
+</head>
+<body>
+  <!-- 設定値をクライアントへ受け渡し（値は UUID / メールアドレスのみ） -->
+  <script>
+    window.__APP__ = {
+      sid: <?!= JSON.stringify(sid) ?>,
+      userEmail: <?!= JSON.stringify(userEmail) ?>,
+      groupEmail: <?!= JSON.stringify(groupEmail) ?>,
+      appTitle: <?!= JSON.stringify(appTitle) ?>,
+      appUrl: <?!= JSON.stringify(appUrl) ?>
+    };
+  </script>
+
+  <header class="topbar">
+    <button id="backBtn" class="icon-btn hidden" title="戻る" aria-label="戻る">‹</button>
+    <div class="topbar-title" id="topTitle"></div>
+    <div class="topbar-spacer"></div>
+    <div class="acct" id="acct"></div>
+    <button id="logoutBtn" class="text-btn">ログアウト</button>
+  </header>
+
+  <!-- 一覧ビュー -->
+  <section id="listView" class="view">
+    <div class="toolbar">
+      <div class="tabs">
+        <button class="tab active" data-folder="inbox">受信</button>
+        <button class="tab" data-folder="sent">送信済み</button>
+      </div>
+      <button id="composeBtn" class="primary-btn">＋ 新規作成</button>
+    </div>
+    <ul id="mailList" class="mail-list"></ul>
+    <div class="list-footer">
+      <button id="moreBtn" class="ghost-btn hidden">さらに読み込む</button>
+      <div id="listStatus" class="status"></div>
+    </div>
+  </section>
+
+  <!-- スレッド表示ビュー（本文全文） -->
+  <section id="threadView" class="view hidden">
+    <h2 id="threadSubject" class="thread-subject"></h2>
+    <div id="threadMessages" class="thread-messages"></div>
+    <div class="thread-actions">
+      <button id="replyBtn" class="primary-btn">返信</button>
+    </div>
+  </section>
+
+  <!-- 返信ビュー（上部に入力／下部に本文） -->
+  <section id="replyView" class="view hidden">
+    <h2 class="thread-subject">返信（全員に返信）</h2>
+    <div class="reply-box">
+      <label class="field">
+        <span class="field-label">宛先 (To)</span>
+        <input id="rTo" type="text" placeholder="someone@example.com, ...">
+      </label>
+      <label class="field">
+        <span class="field-label">Cc</span>
+        <input id="rCc" type="text" placeholder="（任意）">
+      </label>
+      <label class="field">
+        <span class="field-label">Bcc</span>
+        <input id="rBcc" type="text" placeholder="（任意）">
+      </label>
+      <textarea id="replyText" class="reply-text" placeholder="ここに返信を入力（引用は自動で本文末尾に付きます）"></textarea>
+      <div class="reply-actions">
+        <button id="sendReplyBtn" class="primary-btn">送信</button>
+        <button id="replyCancelBtn" class="ghost-btn">キャンセル</button>
+        <span id="replyStatus" class="status"></span>
+      </div>
+    </div>
+    <div class="reply-quote-head">引用元のメッセージ</div>
+    <div id="replyThreadMessages" class="thread-messages"></div>
+  </section>
+
+  <!-- 新規作成ビュー -->
+  <section id="composeView" class="view hidden">
+    <h2 class="thread-subject">新規メール</h2>
+    <div class="compose-form">
+      <label class="field">
+        <span class="field-label">宛先 (To)</span>
+        <input id="cTo" type="text" placeholder="someone@example.com, ...">
+      </label>
+      <label class="field">
+        <span class="field-label">Cc</span>
+        <input id="cCc" type="text" placeholder="（任意）">
+      </label>
+      <label class="field">
+        <span class="field-label">Bcc</span>
+        <input id="cBcc" type="text" placeholder="（任意）">
+      </label>
+      <label class="field">
+        <span class="field-label">件名</span>
+        <input id="cSubject" type="text" placeholder="件名">
+      </label>
+      <label class="field">
+        <span class="field-label">本文</span>
+        <textarea id="cBody" class="compose-body" placeholder="本文"></textarea>
+      </label>
+      <div class="reply-actions">
+        <button id="sendNewBtn" class="primary-btn">送信</button>
+        <button id="cancelComposeBtn" class="ghost-btn">キャンセル</button>
+        <span id="composeStatus" class="status"></span>
+      </div>
+      <p class="from-note">差出人: <span id="fromNote"></span></p>
+    </div>
+  </section>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <?!= include('Client'); ?>
+</body>
+</html>

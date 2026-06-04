@@ -1,0 +1,271 @@
+<script>
+(function () {
+  'use strict';
+
+  var APP = window.__APP__;
+  var SID = APP.sid;
+
+  // ---- google.script.run を Promise 化 ----
+  function call(fn) {
+    var args = Array.prototype.slice.call(arguments, 1);
+    return new Promise(function (resolve, reject) {
+      var runner = google.script.run
+        .withSuccessHandler(resolve)
+        .withFailureHandler(function (err) { reject(err); });
+      runner[fn].apply(runner, args);
+    });
+  }
+
+  // ---- DOM ヘルパー ----
+  function $(id) { return document.getElementById(id); }
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+  var currentView = 'listView';
+  var TITLES = { listView: '', threadView: '', composeView: '新規作成', replyView: '返信' };
+
+  function show(view) {
+    currentView = view;
+    ['listView', 'threadView', 'composeView', 'replyView'].forEach(function (id) {
+      $(id).classList.toggle('hidden', id !== view);
+    });
+    $('backBtn').classList.toggle('hidden', view === 'listView');
+    $('topTitle').textContent = view === 'listView' ? APP.appTitle : (TITLES[view] || '');
+    window.scrollTo(0, 0);
+  }
+
+  // 戻る操作（返信→スレッド、それ以外→一覧）
+  function goBack() {
+    if (currentView === 'replyView') show('threadView');
+    else show('listView');
+  }
+
+  var toastTimer;
+  function toast(msg, isErr) {
+    var t = $('toast');
+    t.textContent = msg;
+    t.className = 'toast' + (isErr ? ' err' : '');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.classList.add('hidden'); }, 3500);
+  }
+  function errMsg(e) {
+    return (e && e.message) ? e.message : String(e || 'エラーが発生しました');
+  }
+
+  // ---- 一覧 ----
+  var state = { folder: 'inbox', nextPageToken: '', loading: false };
+
+  function loadList(folder, append) {
+    if (state.loading) return;
+    state.loading = true;
+    if (!append) {
+      state.folder = folder;
+      state.nextPageToken = '';
+      $('mailList').innerHTML = '';
+      document.querySelectorAll('.tab').forEach(function (b) {
+        b.classList.toggle('active', b.dataset.folder === folder);
+      });
+    }
+    $('listStatus').textContent = '読み込み中…';
+    var fn = folder === 'sent' ? 'api_listSent' : 'api_listInbox';
+    call(fn, SID, append ? state.nextPageToken : '')
+      .then(function (res) {
+        renderListItems(res.items);
+        state.nextPageToken = res.nextPageToken || '';
+        $('moreBtn').classList.toggle('hidden', !state.nextPageToken);
+        $('listStatus').textContent = $('mailList').children.length ? '' : 'メールはありません。';
+      })
+      .catch(function (e) { $('listStatus').textContent = errMsg(e); toast(errMsg(e), true); })
+      .then(function () { state.loading = false; });
+  }
+
+  function renderListItems(items) {
+    var list = $('mailList');
+    items.forEach(function (it) {
+      var li = el('li', 'mail-item' + (it.unread ? ' unread' : ''));
+      li.tabIndex = 0;
+
+      var row1 = el('div', 'mail-row1');
+      var who = el('div', 'mail-who');
+      if (it.unread) who.appendChild(el('span', 'dot'));
+      who.appendChild(document.createTextNode(it.who || '(不明)'));
+      row1.appendChild(who);
+      row1.appendChild(el('div', 'mail-date', it.date || ''));
+      li.appendChild(row1);
+
+      var subj = el('div', 'mail-subject');
+      subj.appendChild(document.createTextNode(it.subject || '(件名なし)'));
+      if (it.count > 1) subj.appendChild(el('span', 'mail-count', ' (' + it.count + ')'));
+      li.appendChild(subj);
+
+      li.appendChild(el('div', 'mail-snippet', it.snippet || ''));
+
+      var open = function () { openThread(it.threadId); };
+      li.addEventListener('click', open);
+      li.addEventListener('keydown', function (e) { if (e.key === 'Enter') open(); });
+      list.appendChild(li);
+    });
+  }
+
+  // ---- スレッド表示 ----
+  var currentThreadId = null;
+  var currentMessages = [];
+  var currentReplyDefaults = { to: '', cc: '', bcc: '' };
+
+  function openThread(threadId) {
+    currentThreadId = threadId;
+    currentMessages = [];
+    currentReplyDefaults = { to: '', cc: '', bcc: '' };
+    $('threadMessages').innerHTML = '<div class="status">読み込み中…</div>';
+    $('threadSubject').textContent = '';
+    show('threadView');
+    call('api_getThread', SID, threadId)
+      .then(function (data) {
+        currentMessages = data.messages || [];
+        currentReplyDefaults = data.replyDefaults || { to: '', cc: '', bcc: '' };
+        $('threadSubject').textContent = data.subject || '(件名なし)';
+        renderMessages($('threadMessages'), currentMessages);
+      })
+      .catch(function (e) {
+        $('threadMessages').innerHTML = '';
+        toast(errMsg(e), true);
+      });
+  }
+
+  // ---- 返信ビュー ----
+  function openReply() {
+    if (!currentMessages.length) { toast('本文の読み込みが完了していません。', true); return; }
+    $('rTo').value = currentReplyDefaults.to || '';
+    $('rCc').value = currentReplyDefaults.cc || '';
+    $('rBcc').value = currentReplyDefaults.bcc || '';
+    $('replyText').value = '';
+    $('replyStatus').textContent = '';
+    renderMessages($('replyThreadMessages'), currentMessages);
+    show('replyView');
+    $('replyText').focus();
+  }
+
+  function renderMessages(wrap, messages) {
+    wrap.innerHTML = '';
+    messages.forEach(function (m) {
+      var card = el('div', 'msg');
+      var head = el('div', 'msg-head');
+      head.appendChild(el('div', 'msg-from', m.from || ''));
+      var meta = '宛先: ' + (m.to || '');
+      if (m.cc) meta += '　Cc: ' + m.cc;
+      if (m.date) meta += '　' + m.date;
+      head.appendChild(el('div', 'msg-meta', meta));
+      card.appendChild(head);
+
+      // 本文は sandbox 化した iframe 内に表示（メール内スクリプトを無効化）
+      var frame = el('iframe', 'msg-body-frame');
+      frame.setAttribute('sandbox', 'allow-same-origin allow-popups allow-popups-to-escape-sandbox');
+      frame.setAttribute('scrolling', 'no');
+      var doc = '<!DOCTYPE html><html><head><meta charset="utf-8"><base target="_blank">'
+        + '<style>html,body{margin:0;padding:0;}'
+        + 'body{font-family:-apple-system,"Segoe UI","Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;'
+        + 'font-size:15px;line-height:1.6;color:#1f2328;padding:12px;word-wrap:break-word;overflow-wrap:anywhere;}'
+        + 'img{max-width:100%;height:auto;}'
+        + 'blockquote{margin:0 0 0 8px;padding-left:10px;border-left:3px solid #d0d7de;color:#57606a;}'
+        + '</style></head><body>' + (m.html || '') + '</body></html>';
+      frame.srcdoc = doc;
+      frame.addEventListener('load', function () {
+        try {
+          var h = frame.contentWindow.document.body.scrollHeight;
+          frame.style.height = (h + 24) + 'px';
+        } catch (e) { frame.style.height = '320px'; }
+      });
+      card.appendChild(frame);
+      wrap.appendChild(card);
+    });
+  }
+
+  function sendReply() {
+    var text = $('replyText').value.trim();
+    if (!text) { toast('返信内容を入力してください。', true); return; }
+    var payload = {
+      to: $('rTo').value.trim(),
+      cc: $('rCc').value.trim(),
+      bcc: $('rBcc').value.trim(),
+      body: text
+    };
+    if (!payload.to) { toast('宛先 (To) を入力してください。', true); return; }
+    var btn = $('sendReplyBtn');
+    btn.disabled = true;
+    $('replyStatus').textContent = '送信中…';
+    call('api_sendReply', SID, currentThreadId, payload)
+      .then(function () {
+        $('replyStatus').textContent = '';
+        toast('返信を送信しました。');
+        openThread(currentThreadId); // スレッドを再読込
+      })
+      .catch(function (e) { $('replyStatus').textContent = ''; toast(errMsg(e), true); })
+      .then(function () { btn.disabled = false; });
+  }
+
+  // ---- 新規作成 ----
+  function openCompose() {
+    ['cTo', 'cCc', 'cBcc', 'cSubject', 'cBody'].forEach(function (id) { $(id).value = ''; });
+    $('composeStatus').textContent = '';
+    $('fromNote').textContent = APP.groupEmail;
+    show('composeView');
+  }
+
+  function sendNew() {
+    var payload = {
+      to: $('cTo').value.trim(),
+      cc: $('cCc').value.trim(),
+      bcc: $('cBcc').value.trim(),
+      subject: $('cSubject').value.trim(),
+      body: $('cBody').value
+    };
+    if (!payload.to) { toast('宛先 (To) を入力してください。', true); return; }
+    var btn = $('sendNewBtn');
+    btn.disabled = true;
+    $('composeStatus').textContent = '送信中…';
+    call('api_sendNew', SID, payload)
+      .then(function () {
+        $('composeStatus').textContent = '';
+        toast('メールを送信しました。');
+        show('listView');
+        loadList('sent');
+      })
+      .catch(function (e) { $('composeStatus').textContent = ''; toast(errMsg(e), true); })
+      .then(function () { btn.disabled = false; });
+  }
+
+  // ---- ログアウト ----
+  function logout() {
+    call('api_logout', SID).catch(function () {}).then(function () {
+      window.top.location.href = APP.appUrl;
+    });
+  }
+
+  // ---- 初期化 ----
+  function init() {
+    $('acct').textContent = APP.userEmail + ' / ' + APP.groupEmail;
+    $('topTitle').textContent = APP.appTitle;
+
+    document.querySelectorAll('.tab').forEach(function (b) {
+      b.addEventListener('click', function () { loadList(b.dataset.folder); });
+    });
+    $('composeBtn').addEventListener('click', openCompose);
+    $('cancelComposeBtn').addEventListener('click', function () { show('listView'); });
+    $('moreBtn').addEventListener('click', function () { loadList(state.folder, true); });
+    $('replyBtn').addEventListener('click', openReply);
+    $('replyCancelBtn').addEventListener('click', function () { show('threadView'); });
+    $('sendReplyBtn').addEventListener('click', sendReply);
+    $('sendNewBtn').addEventListener('click', sendNew);
+    $('backBtn').addEventListener('click', goBack);
+    $('logoutBtn').addEventListener('click', logout);
+
+    show('listView');
+    loadList('inbox');
+  }
+
+  document.addEventListener('DOMContentLoaded', init);
+})();
+</script>

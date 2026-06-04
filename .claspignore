@@ -1,0 +1,9 @@
+# clasp は rootDir(src) 配下のみを push 対象とする。
+# 念のためプロジェクト直下の非ソースを除外。
+**/node_modules/**
+.git/**
+*.md
+.gitignore
+.clasp.json.example
+package.json
+package-lock.json

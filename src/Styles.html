@@ -1,0 +1,150 @@
+<style>
+  :root {
+    --bg: #f6f7f9;
+    --panel: #ffffff;
+    --border: #e2e5ea;
+    --text: #1f2328;
+    --muted: #6b7280;
+    --accent: #1a73e8;
+    --accent-dark: #1659b3;
+    --danger: #c5221f;
+    --unread: #eef4ff;
+    --radius: 10px;
+    --maxw: 820px;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  .hidden { display: none !important; }
+
+  /* ---------- Top bar ---------- */
+  .topbar {
+    position: sticky; top: 0; z-index: 10;
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 14px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+  }
+  .topbar-title { font-weight: 600; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .topbar-spacer { flex: 1; }
+  .acct { color: var(--muted); font-size: 12px; max-width: 40vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .icon-btn {
+    border: none; background: transparent; font-size: 26px; line-height: 1;
+    color: var(--accent); cursor: pointer; padding: 0 6px; border-radius: 6px;
+  }
+  .icon-btn:hover { background: #eef1f5; }
+  .text-btn {
+    border: none; background: transparent; color: var(--muted);
+    cursor: pointer; font-size: 13px; padding: 6px;
+  }
+  .text-btn:hover { color: var(--text); text-decoration: underline; }
+
+  /* ---------- Views ---------- */
+  .view { max-width: var(--maxw); margin: 0 auto; padding: 14px; }
+
+  .toolbar {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px; margin-bottom: 12px; flex-wrap: wrap;
+  }
+  .tabs { display: inline-flex; background: #eceef1; border-radius: 999px; padding: 3px; }
+  .tab {
+    border: none; background: transparent; padding: 7px 18px; border-radius: 999px;
+    cursor: pointer; color: var(--muted); font-size: 14px; font-weight: 600;
+  }
+  .tab.active { background: var(--panel); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+
+  /* ---------- Buttons ---------- */
+  .primary-btn {
+    background: var(--accent); color: #fff; border: none; border-radius: 8px;
+    padding: 9px 18px; font-size: 14px; font-weight: 600; cursor: pointer;
+  }
+  .primary-btn:hover { background: var(--accent-dark); }
+  .primary-btn:disabled { opacity: .55; cursor: default; }
+  .ghost-btn {
+    background: transparent; color: var(--accent); border: 1px solid var(--border);
+    border-radius: 8px; padding: 9px 16px; font-size: 14px; cursor: pointer;
+  }
+  .ghost-btn:hover { background: #eef4ff; }
+
+  /* ---------- Mail list ---------- */
+  .mail-list { list-style: none; margin: 0; padding: 0; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .mail-item { display: block; padding: 12px 14px; border-bottom: 1px solid var(--border); cursor: pointer; }
+  .mail-item:last-child { border-bottom: none; }
+  .mail-item:hover { background: #f3f6fb; }
+  .mail-item.unread { background: var(--unread); }
+  .mail-row1 { display: flex; align-items: baseline; gap: 8px; }
+  .mail-who { font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mail-item.unread .mail-who { font-weight: 700; }
+  .mail-date { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .mail-subject { margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mail-count { color: var(--muted); font-weight: 400; font-size: 12px; }
+  .mail-snippet { color: var(--muted); font-size: 13px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); margin-right: 2px; vertical-align: middle; }
+
+  .list-footer { text-align: center; padding: 14px 0; }
+  .status { color: var(--muted); font-size: 13px; }
+
+  /* ---------- Thread ---------- */
+  .thread-subject { font-size: 19px; margin: 4px 0 14px; }
+  .thread-messages { display: flex; flex-direction: column; gap: 12px; }
+  .msg { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .msg-head { padding: 10px 14px; border-bottom: 1px solid var(--border); background: #fafbfc; }
+  .msg-from { font-weight: 600; }
+  .msg-meta { color: var(--muted); font-size: 12px; margin-top: 2px; word-break: break-all; }
+  .msg-body-frame { width: 100%; border: none; display: block; background: #fff; }
+
+  .thread-actions { margin-top: 16px; display: flex; gap: 10px; }
+  .reply-quote-head { margin: 20px 0 8px; color: var(--muted); font-size: 13px; font-weight: 600; border-top: 1px solid var(--border); padding-top: 14px; }
+
+  .reply-box { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; }
+  .reply-head { font-weight: 600; margin-bottom: 8px; }
+  .reply-text { width: 100%; min-height: 130px; resize: vertical; border: 1px solid var(--border); border-radius: 8px; padding: 10px; font: inherit; }
+  .reply-actions { display: flex; align-items: center; gap: 12px; margin-top: 10px; flex-wrap: wrap; }
+
+  /* ---------- Compose ---------- */
+  .compose-form { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; }
+  .field { display: block; margin-bottom: 12px; }
+  .field-label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+  .field input, .compose-body { width: 100%; border: 1px solid var(--border); border-radius: 8px; padding: 10px; font: inherit; }
+  .compose-body { min-height: 220px; resize: vertical; }
+  .from-note { color: var(--muted); font-size: 12px; margin: 12px 0 0; }
+
+  /* ---------- Toast ---------- */
+  .toast {
+    position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+    background: #1f2328; color: #fff; padding: 10px 18px; border-radius: 999px;
+    font-size: 14px; z-index: 50; box-shadow: 0 4px 16px rgba(0,0,0,.25); max-width: 90vw;
+  }
+  .toast.err { background: var(--danger); }
+
+  /* ---------- Login ---------- */
+  .login-body { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+  .login-card { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 36px 28px; width: min(92vw, 380px); text-align: center; box-shadow: 0 6px 24px rgba(0,0,0,.06); }
+  .login-title { margin: 0 0 4px; font-size: 22px; }
+  .login-sub { margin: 0 0 22px; color: var(--muted); font-size: 14px; }
+  .login-message { background: #fff4f4; color: var(--danger); border: 1px solid #f3c2c1; border-radius: 8px; padding: 10px 12px; font-size: 13px; margin-bottom: 18px; text-align: left; }
+  .gbtn { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; background: var(--accent); color: #fff; padding: 11px 22px; border-radius: 8px; font-weight: 600; }
+  .gbtn:hover { background: var(--accent-dark); }
+  .gbtn-icon { display: inline-grid; place-items: center; width: 22px; height: 22px; background: #fff; color: var(--accent); border-radius: 50%; font-weight: 700; font-size: 14px; }
+  .login-note { color: var(--muted); font-size: 12px; margin: 20px 0 0; }
+
+  /* ---------- Mobile ---------- */
+  @media (max-width: 600px) {
+    body { font-size: 16px; }
+    .view { padding: 10px; }
+    .toolbar { gap: 8px; }
+    .acct { display: none; }
+    .primary-btn, .ghost-btn { padding: 11px 16px; }
+    .tab { padding: 8px 16px; }
+    .thread-subject { font-size: 18px; }
+  }
+</style>
