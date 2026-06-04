@@ -46,58 +46,51 @@ var Mail = (function () {
   // ---- スレッド本文 -----------------------------------------------------
 
   function getThread(threadId) {
-    var full = Gmail.Users.Threads.get(ME, threadId, { format: 'full' });
-    var messages = (full.messages || []).map(function (m) {
-      var h = headerMap(m);
-      var bodies = extractBodies(m.payload);
+    // 本文は GmailApp で取得する（base64/文字コードを GAS が正しく処理するため確実）。
+    var thread = GmailApp.getThreadById(threadId);
+    if (!thread) throw new Error('スレッドが見つかりません。');
+    var gmsgs = thread.getMessages();
+    var messages = gmsgs.map(function (m) {
       return {
-        id: m.id,
-        from: h['from'] || '',
-        to: h['to'] || '',
-        cc: h['cc'] || '',
-        date: formatDate(h['date']),
-        subject: h['subject'] || '',
-        html: bodies.html,
-        text: bodies.text
+        id: m.getId(),
+        from: m.getFrom() || '',
+        to: m.getTo() || '',
+        cc: m.getCc() || '',
+        date: formatDateObj(m.getDate()),
+        subject: m.getSubject() || '',
+        html: m.getBody() || '',          // デコード済み HTML 本文
+        text: m.getPlainBody() || ''
       };
     });
     // 開いたら既読にする（共有運用で「対応済み」が分かるように）
-    try {
-      Gmail.Users.Threads.modify({ removeLabelIds: ['UNREAD'] }, ME, threadId);
-    } catch (e) { /* 既読化失敗は無視 */ }
+    try { thread.markRead(); } catch (e) { /* 既読化失敗は無視 */ }
 
-    var rawMsgs = full.messages || [];
-    var last = rawMsgs[rawMsgs.length - 1];
-    var subject = messages.length ? messages[messages.length - 1].subject : '';
-    var meta = last ? computeReplyMeta(last, headerMap(last)) : { to: '', cc: '' };
+    var last = gmsgs[gmsgs.length - 1];
+    var defaults = last ? replyAddressesFromGmail(last) : { to: '', cc: '' };
     return {
       threadId: threadId,
-      subject: subject,
+      subject: messages.length ? messages[messages.length - 1].subject : '',
       messages: messages,
       // 「全員に返信」の既定アドレス（クライアントで初期値として表示。編集可）
-      replyDefaults: { to: meta.to, cc: meta.cc, bcc: '' }
+      replyDefaults: { to: defaults.to, cc: defaults.cc, bcc: '' }
     };
   }
 
-  /** 「全員に返信」の宛先・件名・スレッド連結用ヘッダーを算出。 */
-  function computeReplyMeta(last, h) {
+  /** GmailMessage から「全員に返信」の宛先(To/Cc)を算出（団体アドレスは除外）。 */
+  function replyAddressesFromGmail(m) {
     var group = Config.groupEmail();
-    var replyTarget = h['reply-to'] || h['from'] || '';
+    var replyTarget = m.getReplyTo() || m.getFrom() || '';
     var toList = dedupeEmails(
-      parseAddrs(replyTarget).concat(parseAddrs(h['to'] || '')),
+      parseAddrs(replyTarget).concat(parseAddrs(m.getTo() || '')),
       [group]
     );
     var ccList = dedupeEmails(
-      parseAddrs(h['cc'] || ''),
+      parseAddrs(m.getCc() || ''),
       [group].concat(toList.map(function (a) { return a.email; }))
     );
-    var msgId = h['message-id'] || '';
     return {
       to: toList.map(function (a) { return a.full; }).join(', '),
-      cc: ccList.map(function (a) { return a.full; }).join(', '),
-      subject: ensureRe(h['subject'] || ''),
-      msgId: msgId,
-      references: (h['references'] ? h['references'] + ' ' : '') + msgId
+      cc: ccList.map(function (a) { return a.full; }).join(', ')
     };
   }
 
@@ -125,30 +118,50 @@ var Mail = (function () {
    */
   function sendReply(threadId, payload, actorEmail) {
     payload = payload || {};
-    var full = Gmail.Users.Threads.get(ME, threadId, { format: 'full' });
-    var msgs = full.messages || [];
-    if (!msgs.length) throw new Error('対象のスレッドが見つかりません。');
-    var last = msgs[msgs.length - 1];
-    var h = headerMap(last);
-    var meta = computeReplyMeta(last, h);
+    var thread = GmailApp.getThreadById(threadId);
+    if (!thread) throw new Error('対象のスレッドが見つかりません。');
+    var gmsgs = thread.getMessages();
+    if (!gmsgs.length) throw new Error('対象のスレッドが見つかりません。');
+    var last = gmsgs[gmsgs.length - 1];
 
     var to = (payload.to || '').trim();
     if (!to) throw new Error('宛先（To）を入力してください。');
 
-    var body = (payload.body || '') + '\n\n' + buildQuote(last, h);
+    var subject = ensureRe(last.getSubject() || '');
+
+    // スレッド連結（In-Reply-To / References）用の Message-ID を取得
+    var msgId = '', references = '';
+    try {
+      var meta = Gmail.Users.Messages.get(ME, last.getId(), {
+        format: 'metadata',
+        metadataHeaders: ['Message-ID', 'References']
+      });
+      var mh = headerMap(meta);
+      msgId = mh['message-id'] || '';
+      references = (mh['references'] ? mh['references'] + ' ' : '') + msgId;
+    } catch (e) { /* 取得できなくても threadId でスレッドは維持される */ }
+
+    var body = (payload.body || '') + '\n\n' + buildQuoteFromGmail(last);
 
     var raw = buildRaw({
       from: Config.groupEmail(),
       to: to,
       cc: (payload.cc || '').trim(),
       bcc: (payload.bcc || '').trim(),
-      subject: meta.subject,
+      subject: subject,
       body: body,
-      inReplyTo: meta.msgId,
-      references: meta.references
+      inReplyTo: msgId,
+      references: references
     });
     var sent = Gmail.Users.Messages.send({ raw: raw, threadId: threadId }, ME);
     return { ok: true, id: sent.id, threadId: sent.threadId };
+  }
+
+  /** GmailMessage から Gmail 風の引用ブロックを作成。 */
+  function buildQuoteFromGmail(m) {
+    var text = m.getPlainBody() || htmlToText(m.getBody() || '');
+    var quoted = (text || '').split(/\r?\n/).map(function (l) { return '> ' + l; }).join('\n');
+    return formatDateObj(m.getDate()) + ' ' + (m.getFrom() || '') + ' のメッセージ:\n' + quoted;
   }
 
   // ---- ヘルパー ---------------------------------------------------------
@@ -158,34 +171,6 @@ var Mail = (function () {
     var hs = (message && message.payload && message.payload.headers) || [];
     hs.forEach(function (h) { map[h.name.toLowerCase()] = h.value; });
     return map;
-  }
-
-  function extractBodies(payload) {
-    var html = '', text = '';
-    (function walk(part) {
-      if (!part) return;
-      if (part.parts && part.parts.length) part.parts.forEach(walk);
-      var mime = part.mimeType || '';
-      if (part.body && part.body.data) {
-        var decoded = decodeB64(part.body.data, partCharset(part));
-        if (mime === 'text/html' && !html) html = decoded;
-        else if (mime === 'text/plain' && !text) text = decoded;
-      }
-    })(payload);
-    if (!html && text) {
-      html = '<pre style="white-space:pre-wrap;word-wrap:break-word;font-family:inherit;margin:0;">'
-        + escapeHtml(text) + '</pre>';
-    }
-    return { html: html, text: text };
-  }
-
-  function buildQuote(message, h) {
-    var bodies = extractBodies(message.payload);
-    var text = bodies.text || (bodies.html ? htmlToText(bodies.html) : '');
-    var quoted = (text || '').split(/\r?\n/).map(function (l) { return '> ' + l; }).join('\n');
-    var dateStr = h['date'] ? formatDate(h['date']) : '';
-    var from = h['from'] || '';
-    return dateStr + ' ' + from + ' のメッセージ:\n' + quoted;
   }
 
   function htmlToText(html) {
@@ -259,58 +244,16 @@ var Mail = (function () {
     return /^re:/i.test(String(s).trim()) ? s : 'Re: ' + s;
   }
 
-  /** パートの Content-Type からエンコーディングを取得（既定 UTF-8）。 */
-  function partCharset(part) {
-    var hs = (part && part.headers) || [];
-    for (var i = 0; i < hs.length; i++) {
-      if (hs[i].name && hs[i].name.toLowerCase() === 'content-type') {
-        var m = /charset\s*=\s*"?([^";]+)"?/i.exec(hs[i].value || '');
-        if (m) return m[1].trim();
-      }
-    }
-    return 'UTF-8';
-  }
-
-  /**
-   * Gmail API の base64url ボディを安全にデコードする。
-   * base64DecodeWebSafe が失敗する入力（パディング無し・標準base64混在等）にも対応し、
-   * 文字コード未対応時は UTF-8 にフォールバックして、例外を投げないようにする。
-   */
-  function decodeB64(data, charset) {
-    if (!data) return '';
-    charset = charset || 'UTF-8';
-    var bytes = null;
-    try {
-      bytes = Utilities.base64DecodeWebSafe(data);
-    } catch (e) {
-      try {
-        var norm = String(data).replace(/-/g, '+').replace(/_/g, '/').replace(/\s+/g, '');
-        while (norm.length % 4 !== 0) norm += '=';
-        bytes = Utilities.base64Decode(norm);
-      } catch (e2) {
-        return '';
-      }
-    }
-    try {
-      return Utilities.newBlob(bytes).getDataAsString(charset);
-    } catch (e3) {
-      try {
-        return Utilities.newBlob(bytes).getDataAsString('UTF-8');
-      } catch (e4) {
-        return '';
-      }
-    }
-  }
-
   function formatDate(s) {
     if (!s) return '';
     var d = new Date(s);
     if (isNaN(d.getTime())) return s;
-    return Utilities.formatDate(d, 'Asia/Tokyo', 'yyyy/MM/dd HH:mm');
+    return formatDateObj(d);
   }
 
-  function escapeHtml(s) {
-    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  function formatDateObj(d) {
+    if (!d || isNaN(d.getTime && d.getTime())) return '';
+    return Utilities.formatDate(d, 'Asia/Tokyo', 'yyyy/MM/dd HH:mm');
   }
 
   return {
