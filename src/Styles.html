@@ -102,7 +102,26 @@
   .msg-meta { color: var(--muted); font-size: 12px; margin-top: 2px; word-break: break-all; }
   .msg-body-frame { width: 100%; border: none; display: block; background: #fff; }
 
-  .thread-actions { margin-top: 16px; display: flex; gap: 10px; }
+  /* 返信ボタンは画面下部にフローティング固定（threadView 内のみ存在するため
+     他ビューでは親の display:none により自動的に非表示になる） */
+  .thread-actions {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    z-index: 20;
+    display: flex; justify-content: center;
+    padding: 12px 14px calc(12px + env(safe-area-inset-bottom, 0px));
+    background: linear-gradient(to top, var(--bg) 55%, rgba(246, 247, 249, 0));
+    pointer-events: none; /* 背景グラデーション部はクリック・スクロールを透過 */
+  }
+  .thread-actions .primary-btn {
+    pointer-events: auto;
+    min-width: 200px;
+    padding: 13px 40px;
+    border-radius: 999px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, .28);
+  }
+  /* フローティングバーに最後のコンテンツが隠れないよう余白を確保 */
+  #threadView { padding-bottom: 92px; }
   .reply-quote-head { margin: 20px 0 8px; color: var(--muted); font-size: 13px; font-weight: 600; border-top: 1px solid var(--border); padding-top: 14px; }
 
   .reply-box { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; }
