@@ -114,25 +114,47 @@
   var currentThreadId = null;
   var currentMessages = [];
   var currentReplyDefaults = { to: '', cc: '', bcc: '' };
+  var threadLimit = 5;        // スレッド内で表示するメッセージ数
+  var THREAD_STEP = 5;        // 「さらに読み込む」で増やす数
+  var threadLoading = false;
 
   function openThread(threadId) {
     currentThreadId = threadId;
     currentMessages = [];
     currentReplyDefaults = { to: '', cc: '', bcc: '' };
+    threadLimit = THREAD_STEP;
     $('threadMessages').innerHTML = '<div class="status">読み込み中…</div>';
     $('threadSubject').textContent = '';
+    $('threadMoreBtn').classList.add('hidden');
     show('threadView');
-    call('api_getThread', SID, threadId)
+    fetchThread();
+  }
+
+  function fetchThread() {
+    if (threadLoading) return;
+    threadLoading = true;
+    $('threadMoreBtn').disabled = true;
+    call('api_getThread', SID, currentThreadId, threadLimit)
       .then(function (data) {
-        currentMessages = data.messages || [];
+        currentMessages = data.messages || [];   // 新しい順
         currentReplyDefaults = data.replyDefaults || { to: '', cc: '', bcc: '' };
         $('threadSubject').textContent = data.subject || '(件名なし)';
         renderMessages($('threadMessages'), currentMessages);
+        $('threadMoreBtn').classList.toggle('hidden', !data.hasMore);
       })
       .catch(function (e) {
-        $('threadMessages').innerHTML = '';
+        if (!currentMessages.length) $('threadMessages').innerHTML = '';
         toast(errMsg(e), true);
+      })
+      .then(function () {
+        threadLoading = false;
+        $('threadMoreBtn').disabled = false;
       });
+  }
+
+  function loadMoreThread() {
+    threadLimit += THREAD_STEP;
+    fetchThread();
   }
 
   // ---- 返信ビュー ----
@@ -256,6 +278,7 @@
     $('cancelComposeBtn').addEventListener('click', function () { show('listView'); });
     $('moreBtn').addEventListener('click', function () { loadList(state.folder, true); });
     $('replyBtn').addEventListener('click', openReply);
+    $('threadMoreBtn').addEventListener('click', loadMoreThread);
     $('replyCancelBtn').addEventListener('click', function () { show('threadView'); });
     $('sendReplyBtn').addEventListener('click', sendReply);
     $('sendNewBtn').addEventListener('click', sendNew);

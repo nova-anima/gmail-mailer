@@ -99,9 +99,9 @@ function api_listSent(sid, pageToken) {
   return Mail.listThreads('in:sent', pageToken);
 }
 
-function api_getThread(sid, threadId) {
+function api_getThread(sid, threadId, limit) {
   Auth.requireSession(sid);
-  return Mail.getThread(threadId);
+  return Mail.getThread(threadId, limit);
 }
 
 function api_sendReply(sid, threadId, payload) {

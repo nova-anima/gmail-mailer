@@ -37,20 +37,35 @@ var Mail = (function () {
         snippet: t.snippet || last.snippet || '',
         date: formatDate(h['date']),
         unread: unread,
-        count: msgs.length
+        count: msgs.length,
+        ts: Number(last.internalDate || 0)   // 最新メッセージの時刻（並べ替え用）
       };
     });
+    // 各スレッドを最新メッセージの時刻が新しい順に並べる
+    items.sort(function (a, b) { return b.ts - a.ts; });
     return { items: items, nextPageToken: res.nextPageToken || '' };
   }
 
   // ---- スレッド本文 -----------------------------------------------------
 
-  function getThread(threadId) {
+  var THREAD_PAGE = 5; // スレッド内で一度に表示するメッセージ数
+
+  /**
+   * スレッド本文を取得。メッセージは新しい順（最新が先頭）で返す。
+   * limit 件（既定5、6件以上は「さらに読み込む」で +5 ずつ）だけ本文を取得する。
+   */
+  function getThread(threadId, limit) {
+    limit = (limit && limit > 0) ? limit : THREAD_PAGE;
     // 本文は GmailApp で取得する（base64/文字コードを GAS が正しく処理するため確実）。
     var thread = GmailApp.getThreadById(threadId);
     if (!thread) throw new Error('スレッドが見つかりません。');
+
     var gmsgs = thread.getMessages();
-    var messages = gmsgs.map(function (m) {
+    gmsgs.reverse(); // 取得は古い順 → 新しい順に
+    var total = gmsgs.length;
+    var visible = gmsgs.slice(0, limit); // 最新 limit 件
+
+    var messages = visible.map(function (m) {
       return {
         id: m.getId(),
         from: m.getFrom() || '',
@@ -62,15 +77,19 @@ var Mail = (function () {
         text: m.getPlainBody() || ''
       };
     });
+
     // 開いたら既読にする（共有運用で「対応済み」が分かるように）
     try { thread.markRead(); } catch (e) { /* 既読化失敗は無視 */ }
 
-    var last = gmsgs[gmsgs.length - 1];
-    var defaults = last ? replyAddressesFromGmail(last) : { to: '', cc: '' };
+    var newest = gmsgs[0];
+    var defaults = newest ? replyAddressesFromGmail(newest) : { to: '', cc: '' };
     return {
       threadId: threadId,
-      subject: messages.length ? messages[messages.length - 1].subject : '',
-      messages: messages,
+      subject: newest ? (newest.getSubject() || '') : '',
+      messages: messages,         // 新しい順
+      total: total,
+      shown: messages.length,
+      hasMore: limit < total,
       // 「全員に返信」の既定アドレス（クライアントで初期値として表示。編集可）
       replyDefaults: { to: defaults.to, cc: defaults.cc, bcc: '' }
     };
